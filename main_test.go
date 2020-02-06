@@ -51,6 +51,8 @@ func TestValidFileTypes(t *testing.T) {
 		{3, "go rb", []string{"go", "rb"}, true},
 		{4, "Go Rb", []string{"go", "rb"}, true},
 		{5, "Go Rb", []string{"go", "rb"}, true},
+		{6, "Go Rb css html", []string{"go", "rb", "css", "html"}, false},
+		{7, "Go Rb css html", []string{"css", "html", "go", "rb"}, true},
 	}
 
 	for _, c := range cases {

@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -23,6 +24,13 @@ var (
 	ErrInvalidScript = errors.New("empty script")
 )
 
+type Configs struct {
+	Path string
+	FileTypes []string
+
+
+}
+
 type Store struct {
 	Filename string
 	FileType string
@@ -38,12 +46,16 @@ func main() {
 	// flags
 	var flagPath string
 	var flagFileTypes string
+	var flagFileTypesZero bool  // for files with no extension
+	var flagExcludeDotDirs bool // exclude .dirs (dot dirs like .git)
 	var flagScript string
 
 	flag.StringVar(&flagPath, "path", ".", "path to monitor")
 	flag.StringVar(&flagPath, "p", "", "(shorthand for path)")
 	flag.StringVar(&flagFileTypes, "filetypes", "htm html css js", "file types to be monitored for changes")
 	flag.StringVar(&flagFileTypes, "f", "htm html css js", "(shorthand for filetypes)")
+	flag.BoolVar(&flagFileTypesZero, "z", false, "file types without extension (boolean, set to true to activate)")
+	flag.BoolVar(&flagExcludeDotDirs, "z", true, "exclude (dot) dirs like .git (boolean, set to false to enable entering them)")
 	flag.StringVar(&flagScript, "script", "", "comand to be called upon change detection")
 	flag.StringVar(&flagScript, "s", "", "(shorthand for script)")
 
@@ -81,12 +93,38 @@ func main() {
 	log.Printf("File Types: %s", fileTypes)
 	log.Printf("Script: %s", script)
 
-	storage.Start()
+	err = storage.Preload(path, fileTypes, flagFileTypesZero)
+	if err != nil {
+		log.Fatalf("*** Error: %s", err)
+	}
 
 }
 
-func (s Storage) Start() {
+// Preload load all files in the storage structure.
+// Parameters are:
+// - initial root
+// - file type extensions
+// - include files with no extension
+// TODO: add a flag for specific filenames
+func (s Storage) Preload(p string, ft []string, z bool) error {
+	err := filepath.Walk(p, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() &&  {
+			log.Printf("* entering directory: %s", info.Name())
+		}
+		if !info.IsDir() {
+			log.Printf("   > checking %s", info.Name())
+			if sort.SearchStrings(ft, info.Name()[1:]) < len(ft) {
+				log.Printf("   + adding %s (%v)", info.Name(), info.ModTime())
+				// TODO Add the file to the slice
+			}
+		}
+		return nil
+	})
 
+	return err
 }
 
 // New storage for the specified path and files.
@@ -118,7 +156,7 @@ func validPath(p string) (string, error) {
 }
 
 // validFileTypes checks if not empty, creates a slice of file types and converts to lower case
-// saving n convertions that way later.
+// saving n convertions that way later. Slice is sorted to ease comparisions later.
 func validFileTypes(ft string) ([]string, error) {
 	var err error
 
@@ -127,6 +165,7 @@ func validFileTypes(ft string) ([]string, error) {
 		return res, ErrInvalidTypes
 	}
 
+	sort.StringSlice(res).Sort()
 	return res, err
 }
 

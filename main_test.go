@@ -31,7 +31,7 @@ func TestValidPath(t *testing.T) {
 			t.Logf("case %d result is %s", c.ID, res)
 		}
 		if (err == nil) != c.Valid {
-			t.Errorf("Case %d got %t should be %t", c.ID, (err == nil), c.Valid)
+			t.Errorf("case %d got %t should be %t", c.ID, (err == nil), c.Valid)
 		}
 
 	}
@@ -51,8 +51,9 @@ func TestValidFileTypes(t *testing.T) {
 		{3, "go rb", []string{"go", "rb"}, true},
 		{4, "Go Rb", []string{"go", "rb"}, true},
 		{5, "Go Rb", []string{"go", "rb"}, true},
-		{6, "Go Rb css html", []string{"go", "rb", "css", "html"}, false},
-		{7, "Go Rb css html", []string{"css", "html", "go", "rb"}, true},
+		{6, "Go Rb Css html", []string{"go", "rb", "css", "html"}, false},
+		{7, "Go Rb Css html", []string{"css", "go", "html", "rb"}, true},
+		{8, "Go - .", []string{"-", ".", "go"}, true},
 	}
 
 	for _, c := range cases {
@@ -60,13 +61,12 @@ func TestValidFileTypes(t *testing.T) {
 		if c.Valid {
 			t.Logf("case %d result is %v", c.ID, res)
 		}
-		if (err == nil) != c.Valid {
-			t.Errorf("Case %d got %t should be %t", c.ID, (err == nil), c.Valid)
+		if (err != nil) && c.Valid {
+			t.Errorf("case %d got %t should be %t", c.ID, (err == nil), c.Valid)
 		}
-		if !cmp.Equal(res, c.Res) {
+		if c.Valid && !cmp.Equal(res, c.Res) {
 			t.Errorf("case %d diffs: \n%s", c.ID, cmp.Diff(res, c.Res))
 		}
-
 	}
 }
 
@@ -85,7 +85,7 @@ func TestValidScript(t *testing.T) {
 	for _, c := range cases {
 		_, err := validScript(c.Script)
 		if (err == nil) != c.Valid {
-			t.Errorf("Case %d got %t should be %t", c.ID, (err == nil), c.Valid)
+			t.Errorf("case %d got %t should be %t", c.ID, (err == nil), c.Valid)
 		}
 	}
 }

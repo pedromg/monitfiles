@@ -10,11 +10,6 @@ import (
 	"strings"
 )
 
-const (
-	// MAX_FILES sets a limit for max number of files to monitor
-	MAX_FILES = 100
-)
-
 var (
 	ErrInvalidParam  = errors.New("invalid param(s)")
 	ErrFile          = errors.New("invalid file")
@@ -22,15 +17,24 @@ var (
 	ErrNotAPath      = errors.New("invalid path, please select a path not a file")
 	ErrInvalidTypes  = errors.New("invalid file types")
 	ErrInvalidScript = errors.New("empty script")
+	ErrMaxFiles      = errors.New("MAX files limit reached, please consider new limit")
 )
 
+// Configs struct
 type Configs struct {
-	Path string
-	FileTypes []string
-
-
+	Path             string
+	FileTypes        []string
+	FileTypeNone     bool
+	ExcludeDotDirs   bool
+	IncludeFileNames []string
+	ExcludeFileNames []string
+	Script           string
+	MaxFiles         uint
+	ScannedDirs      uint
+	Files            uint
 }
 
+// Store struct for each file monitoring
 type Store struct {
 	Filename string
 	FileType string
@@ -43,21 +47,38 @@ type Storage []Store
 // 	$ reloadtab --path . --filetypes htm html css js --script "osascript -e 'tell application "Brave" to tell the active tab of its first window to reload'"
 func main() {
 
+	var err error
+
+	config := &Configs{
+		Path:             "",
+		FileTypes:        []string{},
+		FileTypeNone:     false,
+		ExcludeDotDirs:   true,
+		IncludeFileNames: []string{}, //TODO
+		ExcludeFileNames: []string{}, //TODO
+		Script:           "",
+		MaxFiles:         0,
+		ScannedDirs:      0,
+		Files:            0,
+	}
+
 	// flags
 	var flagPath string
 	var flagFileTypes string
-	var flagFileTypesZero bool  // for files with no extension
+	var flagFileTypeNone bool   // for files with no extension
 	var flagExcludeDotDirs bool // exclude .dirs (dot dirs like .git)
+	var flagMaxFiles uint
 	var flagScript string
 
 	flag.StringVar(&flagPath, "path", ".", "path to monitor")
 	flag.StringVar(&flagPath, "p", "", "(shorthand for path)")
 	flag.StringVar(&flagFileTypes, "filetypes", "htm html css js", "file types to be monitored for changes")
 	flag.StringVar(&flagFileTypes, "f", "htm html css js", "(shorthand for filetypes)")
-	flag.BoolVar(&flagFileTypesZero, "z", false, "file types without extension (boolean, set to true to activate)")
-	flag.BoolVar(&flagExcludeDotDirs, "z", true, "exclude (dot) dirs like .git (boolean, set to false to enable entering them)")
+	flag.BoolVar(&flagFileTypeNone, "none", false, "file types without extension (boolean, set to true to activate)")
+	flag.BoolVar(&flagExcludeDotDirs, "no-dot", true, "exclude (dot) dirs like .git (boolean, set to false to enable entering them)")
 	flag.StringVar(&flagScript, "script", "", "comand to be called upon change detection")
 	flag.StringVar(&flagScript, "s", "", "(shorthand for script)")
+	flag.UintVar(&flagMaxFiles, "max", 200, "max number of files to monitor")
 
 	flag.Parse()
 
@@ -66,70 +87,103 @@ func main() {
 		log.Fatal("please specify params")
 	}
 
-	path, err := validPath(flagPath)
+	config.Path, err = validPath(flagPath)
 	if err != nil {
 		log.Printf("use -h for help")
 		log.Fatalf("*** Error: %s", err)
 	}
-	fileTypes, err := validFileTypes(flagFileTypes)
+	config.FileTypes, err = validFileTypes(flagFileTypes)
 	if err != nil {
 		log.Printf("use -h for help")
 		log.Fatalf("*** Error: %s", err)
 	}
-	script, err := validScript(flagScript)
+	config.FileTypeNone = flagFileTypeNone
+	config.ExcludeDotDirs = flagExcludeDotDirs
+	config.MaxFiles = flagMaxFiles
+	config.Script, err = validScript(flagScript)
 	if err != nil {
 		log.Printf("use -h for help")
 		log.Fatalf("*** Error: %s", err)
 	}
 
 	var storage Storage
-	err = storage.New(path, fileTypes)
+	err = storage.New(*config)
 	if err != nil {
 		log.Printf("use -h for help")
 		log.Fatalf("*** Error: %s", err)
 	}
 
-	log.Printf("Root: %s", path)
-	log.Printf("File Types: %s", fileTypes)
-	log.Printf("Script: %s", script)
-
-	err = storage.Preload(path, fileTypes, flagFileTypesZero)
+	config.ScannedDirs, config.Files, err = storage.Preload(*config)
 	if err != nil {
 		log.Fatalf("*** Error: %s", err)
 	}
 
+	log.Print("************************************************")
+	log.Printf("Root path: %s", config.Path)
+	log.Printf("File types: %s", config.FileTypes)
+	log.Printf("File types with no extension ? %t", config.FileTypeNone)
+	log.Printf("Exclude dot dirs ? %t", config.ExcludeDotDirs)
+	log.Printf("Max number of files: %d", config.MaxFiles)
+	log.Printf("Script: %s", config.Script)
+	log.Printf("Number of directories scanned: %d", config.ScannedDirs)
+	log.Printf("Number of files added and being monitored: %d", config.Files)
+	log.Print("************************************************")
+
 }
 
 // Preload load all files in the storage structure.
-// Parameters are:
-// - initial root
-// - file type extensions
-// - include files with no extension
 // TODO: add a flag for specific filenames
-func (s Storage) Preload(p string, ft []string, z bool) error {
-	err := filepath.Walk(p, func(path string, info os.FileInfo, err error) error {
+// Returns:
+// - number of scanned dirs
+// - number of added files
+func (s Storage) Preload(config Configs) (uint, uint, error) {
+	var nd, nf uint = 0, 0
+
+	err := filepath.Walk(config.Path, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
-		if info.IsDir() &&  {
-			log.Printf("* entering directory: %s", info.Name())
+		if nf > config.MaxFiles {
+			return ErrMaxFiles
 		}
+		if info.IsDir() {
+			// directory exclusion
+			if (info.Name()[0:1] == ".") && config.ExcludeDotDirs {
+				return filepath.SkipDir
+			} else {
+				nd += 1
+				log.Printf("* entering directory: %s", info.Name())
+			}
+		}
+		// file picking
 		if !info.IsDir() {
 			log.Printf("   > checking %s", info.Name())
-			if sort.SearchStrings(ft, info.Name()[1:]) < len(ft) {
-				log.Printf("   + adding %s (%v)", info.Name(), info.ModTime())
+			if !info.Mode().IsRegular() {
+				return filepath.SkipDir
+			}
+			// check extension size and if allowed
+			ext_size := len(filepath.Ext(info.Name()))
+			if ext_size == 0 && !config.FileTypeNone {
+				return filepath.SkipDir
+			}
+			// check if extension inside slice of valid ones
+			ext := filepath.Ext(info.Name())[1:]
+			i := sort.SearchStrings(config.FileTypes, ext)
+			if ext_size > 0 && i < len(config.FileTypes) && config.FileTypes[i] == ext {
 				// TODO Add the file to the slice
+				log.Printf("   + adding %s (%v)", info.Name(), info.ModTime())
+				nf += 1
 			}
 		}
 		return nil
 	})
 
-	return err
+	return nd, nf, err
 }
 
 // New storage for the specified path and files.
 // Will filter specified file types. Makes us of https://golang.org/pkg/path/filepath/#Walk
-func (s Storage) New(root string, fileTypes []string) error {
+func (s Storage) New(config Configs) error {
 	var err error
 
 	return err

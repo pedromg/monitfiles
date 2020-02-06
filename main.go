@@ -15,11 +15,12 @@ const (
 )
 
 var (
-	ErrInvalidParam = errors.New("invalid param(s)")
-	ErrFile         = errors.New("invalid file")
-	ErrPath         = errors.New("path error")
-	ErrNotAPath     = errors.New("invalid path, please select a path not a file")
-	ErrInvalidTypes = errors.New("invalid file types")
+	ErrInvalidParam  = errors.New("invalid param(s)")
+	ErrFile          = errors.New("invalid file")
+	ErrPath          = errors.New("path error")
+	ErrNotAPath      = errors.New("invalid path, please select a path not a file")
+	ErrInvalidTypes  = errors.New("invalid file types")
+	ErrInvalidScript = errors.New("empty script")
 )
 
 type Store struct {
@@ -131,6 +132,10 @@ func validFileTypes(ft string) ([]string, error) {
 
 func validScript(s string) (string, error) {
 	var err error
+
+	if len(s) == 0 {
+		return "", ErrInvalidScript
+	}
 
 	return s, err
 }

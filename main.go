@@ -1,13 +1,16 @@
 package main
 
 import (
+	"bufio"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 var (
@@ -36,11 +39,15 @@ type Configs struct {
 
 // Store struct for each file monitoring
 type Store struct {
+	ID       uint
 	Filename string
 	FileType string
+	Path     string
+	ModTime  time.Time
 	Info     os.FileInfo
 }
 
+// Storage is the global slice of stores for files
 type Storage []Store
 
 // Execution:
@@ -106,14 +113,8 @@ func main() {
 		log.Fatalf("*** Error: %s", err)
 	}
 
-	var storage Storage
-	err = storage.New(*config)
-	if err != nil {
-		log.Printf("use -h for help")
-		log.Fatalf("*** Error: %s", err)
-	}
-
-	config.ScannedDirs, config.Files, err = storage.Preload(*config)
+	storage := Storage{}
+	config.ScannedDirs, config.Files, err = storage.New(*config)
 	if err != nil {
 		log.Fatalf("*** Error: %s", err)
 	}
@@ -128,15 +129,53 @@ func main() {
 	log.Printf("Number of directories scanned: %d", config.ScannedDirs)
 	log.Printf("Number of files added and being monitored: %d", config.Files)
 	log.Print("************************************************")
+	fmt.Println()
+	fmt.Print("> ")
 
+	// deamonize
+	// WIP
+
+	// user interface
+	scanner := bufio.NewScanner(os.Stdin)
+	for scanner.Scan() {
+		fmt.Print("> ")
+		line := scanner.Text()
+		parser(line, storage, *config)
+	}
+	if err := scanner.Err(); err != nil {
+		fmt.Fprintln(os.Stderr, "reading standard input:", err)
+	}
 }
 
-// Preload load all files in the storage structure.
-// TODO: add a flag for specific filenames
+// parser is the function parses and interprets the command
+func parser(cmd string, storage Storage, config Configs) {
+	fmt.Println("")
+	switch cmd {
+	case "quit":
+		os.Exit(1)
+	case "?", "help", "h":
+		fmt.Println("available commands: quit help moo count list")
+	case "moo":
+		fmt.Println("mooooooooo...")
+	case "count":
+		fmt.Printf("%d files on store \n", len(storage))
+	case "list":
+		for _, s := range storage {
+			fmt.Printf("%d %s last modified at %v \n", s.ID, s.Path, s.ModTime)
+		}
+	default:
+		fmt.Println("unknown command...")
+
+	}
+	fmt.Print("> ")
+}
+
+// New storage preloads all files in the storage structure.
 // Returns:
 // - number of scanned dirs
 // - number of added files
-func (s Storage) Preload(config Configs) (uint, uint, error) {
+// - error
+func (s *Storage) New(config Configs) (uint, uint, error) {
 	var nd, nf uint = 0, 0
 
 	err := filepath.Walk(config.Path, func(path string, info os.FileInfo, err error) error {
@@ -170,23 +209,24 @@ func (s Storage) Preload(config Configs) (uint, uint, error) {
 			ext := filepath.Ext(info.Name())[1:]
 			i := sort.SearchStrings(config.FileTypes, ext)
 			if ext_size > 0 && i < len(config.FileTypes) && config.FileTypes[i] == ext {
-				// TODO Add the file to the slice
+				// add the file
 				log.Printf("   + adding %s (%v)", info.Name(), info.ModTime())
 				nf += 1
+				f := Store{
+					ID:       nf,
+					Filename: info.Name(),
+					FileType: ext,
+					Path:     path,
+					ModTime:  info.ModTime(),
+					Info:     info,
+				}
+				*s = append(*s, f)
 			}
 		}
 		return nil
 	})
 
 	return nd, nf, err
-}
-
-// New storage for the specified path and files.
-// Will filter specified file types. Makes us of https://golang.org/pkg/path/filepath/#Walk
-func (s Storage) New(config Configs) error {
-	var err error
-
-	return err
 }
 
 // validPath check the existance of a path and converts to Absolute path.

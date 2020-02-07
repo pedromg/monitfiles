@@ -36,6 +36,8 @@ type Configs struct {
 	Interval         uint // seconds
 	ScannedDirs      uint
 	Files            uint
+	Ticker           *time.Ticker
+	Done             chan bool
 }
 
 // Store struct for each file monitoring
@@ -46,6 +48,7 @@ type Store struct {
 	Path     string
 	ModTime  time.Time
 	Info     os.FileInfo
+	Updated  uint
 }
 
 // Storage is the global slice of stores for files
@@ -117,6 +120,9 @@ func main() {
 		log.Printf("use -h for help")
 		log.Fatalf("*** Error: %s", err)
 	}
+	// channels
+	config.Ticker = time.NewTicker(time.Duration(config.Interval) * time.Second)
+	config.Done = make(chan bool)
 
 	storage := Storage{}
 	config.ScannedDirs, config.Files, err = storage.New(*config)
@@ -143,7 +149,7 @@ func main() {
 	for scanner.Scan() {
 		fmt.Print("> ")
 		line := scanner.Text()
-		parser(line, storage, *config)
+		parser(line, &storage, config)
 	}
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "reading standard input:", err)
@@ -151,7 +157,7 @@ func main() {
 }
 
 // parser is the function parses and interprets the command
-func parser(cmd string, storage Storage, config Configs) {
+func parser(cmd string, storage *Storage, config *Configs) {
 	fmt.Println("")
 	switch cmd {
 	case "quit":
@@ -161,7 +167,7 @@ func parser(cmd string, storage Storage, config Configs) {
 	case "moo":
 		fmt.Println("^__^ \n(oo)\\_______ \n(__)\\       )\\/\\ \n    ||----w | \n    ||     ||")
 	case "count":
-		fmt.Printf("%d files on store \n", len(storage))
+		fmt.Printf("%d files on store \n", len(*storage))
 	case "configs":
 		fmt.Println("configs:")
 		fmt.Printf("   Root path: %s \n", config.Path)
@@ -174,22 +180,64 @@ func parser(cmd string, storage Storage, config Configs) {
 		fmt.Printf("   Number of directories scanned: %d \n", config.ScannedDirs)
 		fmt.Printf("   Number of files added and being monitored: %d \n", config.Files)
 	case "list":
-		for _, s := range storage {
+		for _, s := range *storage {
 			fmt.Printf("%d %s last modified at %v \n", s.ID, s.Path, s.ModTime)
 		}
 	case "start":
 		// start monitoring
-		// WIP
+		fmt.Println("launching routines, please wait...")
+		for _, s := range *storage {
+			s.Monitor(config)
+		}
 		fmt.Printf("ok, monitoring %d files at interval %d seconds \n", config.Files, config.Interval)
 	case "stop":
 		// stop monitoring
 		// WIP
+		config.Done <- true
 		fmt.Printf("ok, stopped monitoring %d files \n", config.Files)
 	default:
 		fmt.Println("unknown command...")
 
 	}
 	fmt.Print("> ")
+}
+
+// Exec the script
+func Exec(config *Configs) {
+	fmt.Println("SCRRRRRIIIIPPPTTTTTTTT !!! ")
+}
+
+// Monitor a file for file changes every interval.
+// On each tick, file changes are checked. If file check returns error a log warning is generated only.
+func (s *Store) Monitor(config *Configs) {
+
+	go func() {
+		for {
+			select {
+			case <-config.Done:
+				log.Printf("routine done! (file %d)", s.ID)
+				return
+			case _ = <-config.Ticker.C:
+				f, err := os.Stat(s.Path)
+				if err != nil {
+					log.Printf("file check error for (%d) %s (%s)", s.ID, s.Filename, err)
+				} else {
+					if f.ModTime() != s.ModTime {
+						log.Printf("file change: (%d) %s", s.ID, s.Filename)
+						// update the record with new information
+						s.ModTime = f.ModTime()
+						s.Info = f
+						s.Updated += 1
+						// exec script
+						Exec(config)
+
+					}
+				}
+
+			}
+		}
+	}()
+
 }
 
 // New storage preloads all files in the storage structure.
@@ -240,6 +288,7 @@ func (s *Storage) New(config Configs) (uint, uint, error) {
 					FileType: ext,
 					Path:     path,
 					ModTime:  info.ModTime(),
+					Updated:  0,
 					Info:     info,
 				}
 				*s = append(*s, f)

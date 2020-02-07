@@ -138,9 +138,6 @@ func main() {
 	fmt.Println()
 	fmt.Print("> ")
 
-	// deamonize
-	// WIP
-
 	// user interface
 	scanner := bufio.NewScanner(os.Stdin)
 	for scanner.Scan() {
@@ -160,7 +157,7 @@ func parser(cmd string, storage Storage, config Configs) {
 	case "quit":
 		os.Exit(1)
 	case "?", "help", "h":
-		fmt.Println("available commands: quit help moo count list configs")
+		fmt.Println("available commands: quit help moo count list configs start stop")
 	case "moo":
 		fmt.Println("mooooooooo...")
 	case "count":
@@ -180,6 +177,14 @@ func parser(cmd string, storage Storage, config Configs) {
 		for _, s := range storage {
 			fmt.Printf("%d %s last modified at %v \n", s.ID, s.Path, s.ModTime)
 		}
+	case "start":
+		// start monitoring
+		// WIP
+		fmt.Printf("ok, monitoring %d files at interval %d seconds \n", config.Files, config.Interval)
+	case "stop":
+		// stop monitoring
+		// WIP
+		fmt.Printf("ok, stopped monitoring %d files \n", config.Files)
 	default:
 		fmt.Println("unknown command...")
 

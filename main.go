@@ -33,6 +33,7 @@ type Configs struct {
 	ExcludeFileNames []string
 	Script           string
 	MaxFiles         uint
+	Interval         uint // seconds
 	ScannedDirs      uint
 	Files            uint
 }
@@ -65,6 +66,7 @@ func main() {
 		ExcludeFileNames: []string{}, //TODO
 		Script:           "",
 		MaxFiles:         0,
+		Interval:         2,
 		ScannedDirs:      0,
 		Files:            0,
 	}
@@ -75,6 +77,7 @@ func main() {
 	var flagFileTypeNone bool   // for files with no extension
 	var flagExcludeDotDirs bool // exclude .dirs (dot dirs like .git)
 	var flagMaxFiles uint
+	var flagInterval uint
 	var flagScript string
 
 	flag.StringVar(&flagPath, "path", ".", "path to monitor")
@@ -86,6 +89,7 @@ func main() {
 	flag.StringVar(&flagScript, "script", "", "comand to be called upon change detection")
 	flag.StringVar(&flagScript, "s", "", "(shorthand for script)")
 	flag.UintVar(&flagMaxFiles, "max", 200, "max number of files to monitor")
+	flag.UintVar(&flagInterval, "i", 2, "interval in seconds for monitor changes")
 
 	flag.Parse()
 
@@ -107,6 +111,7 @@ func main() {
 	config.FileTypeNone = flagFileTypeNone
 	config.ExcludeDotDirs = flagExcludeDotDirs
 	config.MaxFiles = flagMaxFiles
+	config.Interval = flagInterval
 	config.Script, err = validScript(flagScript)
 	if err != nil {
 		log.Printf("use -h for help")
@@ -125,6 +130,7 @@ func main() {
 	log.Printf("File types with no extension ? %t", config.FileTypeNone)
 	log.Printf("Exclude dot dirs ? %t", config.ExcludeDotDirs)
 	log.Printf("Max number of files: %d", config.MaxFiles)
+	log.Printf("Interval: %d seconds", config.Interval)
 	log.Printf("Script: %s", config.Script)
 	log.Printf("Number of directories scanned: %d", config.ScannedDirs)
 	log.Printf("Number of files added and being monitored: %d", config.Files)
@@ -154,11 +160,22 @@ func parser(cmd string, storage Storage, config Configs) {
 	case "quit":
 		os.Exit(1)
 	case "?", "help", "h":
-		fmt.Println("available commands: quit help moo count list")
+		fmt.Println("available commands: quit help moo count list configs")
 	case "moo":
 		fmt.Println("mooooooooo...")
 	case "count":
 		fmt.Printf("%d files on store \n", len(storage))
+	case "configs":
+		fmt.Println("configs:")
+		fmt.Printf("   Root path: %s \n", config.Path)
+		fmt.Printf("   File types: %s \n", config.FileTypes)
+		fmt.Printf("   File types with no extension ? %t \n", config.FileTypeNone)
+		fmt.Printf("   Exclude dot dirs ? %t \n", config.ExcludeDotDirs)
+		fmt.Printf("   Max number of files: %d \n", config.MaxFiles)
+		fmt.Printf("   Interval: %d seconds \n", config.Interval)
+		fmt.Printf("   Script: %s \n", config.Script)
+		fmt.Printf("   Number of directories scanned: %d \n", config.ScannedDirs)
+		fmt.Printf("   Number of files added and being monitored: %d \n", config.Files)
 	case "list":
 		for _, s := range storage {
 			fmt.Printf("%d %s last modified at %v \n", s.ID, s.Path, s.ModTime)

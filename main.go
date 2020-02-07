@@ -159,7 +159,7 @@ func parser(cmd string, storage Storage, config Configs) {
 	case "?", "help", "h":
 		fmt.Println("available commands: quit help moo count list configs start stop")
 	case "moo":
-		fmt.Println("mooooooooo...")
+		fmt.Println("^__^ \n(oo)\\_______ \n(__)\\       )\\/\\ \n    ||----w | \n    ||     ||")
 	case "count":
 		fmt.Printf("%d files on store \n", len(storage))
 	case "configs":

@@ -36,8 +36,7 @@ type Configs struct {
 	Interval         uint // seconds
 	ScannedDirs      uint
 	Files            uint
-	Ticker           *time.Ticker
-	Done             chan bool
+	Trigger          chan bool
 }
 
 // Store struct for each file monitoring
@@ -49,6 +48,9 @@ type Store struct {
 	ModTime  time.Time
 	Info     os.FileInfo
 	Updated  uint
+	Ticker   *time.Ticker
+	State    chan bool
+	Done     chan bool
 }
 
 // Storage is the global slice of stores for files
@@ -121,13 +123,17 @@ func main() {
 		log.Fatalf("*** Error: %s", err)
 	}
 	// channels
-	config.Ticker = time.NewTicker(time.Duration(config.Interval) * time.Second)
-	config.Done = make(chan bool)
+	config.Trigger = make(chan bool)
 
-	storage := Storage{}
+	storage := &Storage{}
 	config.ScannedDirs, config.Files, err = storage.New(*config)
 	if err != nil {
 		log.Fatalf("*** Error: %s", err)
+	}
+
+	// start monitoring
+	for i, _ := range *storage {
+		(*storage)[i].Monitor(config)
 	}
 
 	log.Print("************************************************")
@@ -142,6 +148,7 @@ func main() {
 	log.Printf("Number of files added and being monitored: %d", config.Files)
 	log.Print("************************************************")
 	fmt.Println()
+
 	fmt.Print("> ")
 
 	// user interface
@@ -149,7 +156,10 @@ func main() {
 	for scanner.Scan() {
 		fmt.Print("> ")
 		line := scanner.Text()
-		parser(line, &storage, config)
+		if line == "" {
+			continue
+		}
+		parser(line, storage, config)
 	}
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "reading standard input:", err)
@@ -161,11 +171,14 @@ func parser(cmd string, storage *Storage, config *Configs) {
 	fmt.Println("")
 	switch cmd {
 	case "quit":
+		for i, _ := range *storage {
+			(*storage)[i].Done <- true
+		}
 		os.Exit(1)
 	case "?", "help", "h":
 		fmt.Println("available commands: quit help moo count list configs start stop")
 	case "moo":
-		fmt.Println("^__^ \n(oo)\\_______ \n(__)\\       )\\/\\ \n    ||----w | \n    ||     ||")
+		fmt.Println("^__^ \n(oo)\\_______ \n(__)\\       )\\/\\ \n    ||----w | \n    ||     ||\n")
 	case "count":
 		fmt.Printf("%d files on store \n", len(*storage))
 	case "configs":
@@ -184,17 +197,16 @@ func parser(cmd string, storage *Storage, config *Configs) {
 			fmt.Printf("%d %s last modified at %v \n", s.ID, s.Path, s.ModTime)
 		}
 	case "start":
-		// start monitoring
-		fmt.Println("launching routines, please wait...")
-		for _, s := range *storage {
-			s.Monitor(config)
+		for i, _ := range *storage {
+			(*storage)[i].State <- true
 		}
-		fmt.Printf("ok, monitoring %d files at interval %d seconds \n", config.Files, config.Interval)
+		log.Printf("+++ monitoring %d files at interval %d seconds \n", config.Files, config.Interval)
 	case "stop":
-		// stop monitoring
-		// WIP
-		config.Done <- true
-		fmt.Printf("ok, stopped monitoring %d files \n", config.Files)
+		for i, _ := range *storage {
+			(*storage)[i].State <- false
+		}
+		log.Printf("+++ stopped monitoring %d files \n", config.Files)
+	case "debug":
 	default:
 		fmt.Println("unknown command...")
 
@@ -204,26 +216,36 @@ func parser(cmd string, storage *Storage, config *Configs) {
 
 // Exec the script
 func Exec(config *Configs) {
-	fmt.Println("SCRRRRRIIIIPPPTTTTTTTT !!! ")
+	fmt.Println("        *** SCRIPT ***")
+	fmt.Println("        *** SCRIPT ***")
+	fmt.Println("        *** SCRIPT ***")
 }
 
 // Monitor a file for file changes every interval.
 // On each tick, file changes are checked. If file check returns error a log warning is generated only.
+// Upon Done, goroutines is returned, channels are closed.
+// State channel activates/deactivates the monitoring action, yet trigger continues.
 func (s *Store) Monitor(config *Configs) {
 
-	go func() {
+	go func(s Store) {
+
+		defer close(s.Done)
+		defer s.Ticker.Stop()
+
+		var state = true
+
 		for {
 			select {
-			case <-config.Done:
-				log.Printf("routine done! (file %d)", s.ID)
+			case <-s.Done:
 				return
-			case _ = <-config.Ticker.C:
+			case state = <-s.State:
+			case <-s.Ticker.C:
 				f, err := os.Stat(s.Path)
 				if err != nil {
 					log.Printf("file check error for (%d) %s (%s)", s.ID, s.Filename, err)
 				} else {
-					if f.ModTime() != s.ModTime {
-						log.Printf("file change: (%d) %s", s.ID, s.Filename)
+					if state && f.ModTime() != s.ModTime {
+						log.Printf(" +++ file change: (%d) %s", s.ID, s.Filename)
 						// update the record with new information
 						s.ModTime = f.ModTime()
 						s.Info = f
@@ -233,10 +255,9 @@ func (s *Store) Monitor(config *Configs) {
 
 					}
 				}
-
 			}
 		}
-	}()
+	}(*s)
 
 }
 
@@ -245,6 +266,7 @@ func (s *Store) Monitor(config *Configs) {
 // - number of scanned dirs
 // - number of added files
 // - error
+// A ticker channel is added so that there's independence per store.
 func (s *Storage) New(config Configs) (uint, uint, error) {
 	var nd, nf uint = 0, 0
 
@@ -290,6 +312,9 @@ func (s *Storage) New(config Configs) (uint, uint, error) {
 					ModTime:  info.ModTime(),
 					Updated:  0,
 					Info:     info,
+					Done:     make(chan bool),
+					State:    make(chan bool),
+					Ticker:   time.NewTicker(time.Duration(config.Interval) * time.Second),
 				}
 				*s = append(*s, f)
 			}

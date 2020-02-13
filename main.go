@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -216,9 +217,18 @@ func parser(cmd string, storage *Storage, config *Configs) {
 
 // Exec the script
 func Exec(config *Configs) {
-	fmt.Println("        *** SCRIPT ***")
-	fmt.Println("        *** SCRIPT ***")
-	fmt.Println("        *** SCRIPT ***")
+	//log.Printf(" Script triggered...\n")
+	//cmd := exec.Command(config.Script, "1")
+	//err := cmd.Run()
+	//if err != nil {
+	//	log.Printf("Script error: %v\n", err)
+	//}
+	log.Printf("Script: %s\n", config.Script)
+	out, err := exec.Command(config.Script).Output()
+	if err != nil {
+		log.Printf("Script error: %v\n", err)
+	}
+	fmt.Printf("Script result: %s\n", out)
 }
 
 // Monitor a file for file changes every interval.

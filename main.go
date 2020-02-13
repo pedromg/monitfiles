@@ -33,6 +33,8 @@ type Configs struct {
 	IncludeFileNames []string
 	ExcludeFileNames []string
 	Script           string
+	Blocking         bool // blocks script execution, waits to finish, defaults to false
+	Verbose          bool
 	MaxFiles         uint
 	Interval         uint // seconds
 	ScannedDirs      uint
@@ -71,6 +73,8 @@ func main() {
 		IncludeFileNames: []string{}, //TODO
 		ExcludeFileNames: []string{}, //TODO
 		Script:           "",
+		Blocking:         false,
+		Verbose:          false,
 		MaxFiles:         0,
 		Interval:         2,
 		ScannedDirs:      0,
@@ -82,6 +86,8 @@ func main() {
 	var flagFileTypes string
 	var flagFileTypeNone bool   // for files with no extension
 	var flagExcludeDotDirs bool // exclude .dirs (dot dirs like .git)
+	var flagBlocking bool
+	var flagVerbose bool
 	var flagMaxFiles uint
 	var flagInterval uint
 	var flagScript string
@@ -94,6 +100,8 @@ func main() {
 	flag.BoolVar(&flagExcludeDotDirs, "no-dot", true, "exclude (dot) dirs like .git (boolean, set to false to enable entering them)")
 	flag.StringVar(&flagScript, "script", "", "comand to be called upon change detection")
 	flag.StringVar(&flagScript, "s", "", "(shorthand for script)")
+	flag.BoolVar(&flagBlocking, "b", false, "blocks script execution, waits to finish, defaults to false")
+	flag.BoolVar(&flagVerbose, "v", false, "verbose output")
 	flag.UintVar(&flagMaxFiles, "max", 200, "max number of files to monitor")
 	flag.UintVar(&flagInterval, "i", 2, "interval in seconds for monitor changes")
 
@@ -116,6 +124,8 @@ func main() {
 	}
 	config.FileTypeNone = flagFileTypeNone
 	config.ExcludeDotDirs = flagExcludeDotDirs
+	config.Blocking = flagBlocking
+	config.Verbose = flagVerbose
 	config.MaxFiles = flagMaxFiles
 	config.Interval = flagInterval
 	config.Script, err = validScript(flagScript)
@@ -143,6 +153,8 @@ func main() {
 	log.Printf("File types with no extension ? %t", config.FileTypeNone)
 	log.Printf("Exclude dot dirs ? %t", config.ExcludeDotDirs)
 	log.Printf("Max number of files: %d", config.MaxFiles)
+	log.Printf("Blocking ? %t", config.Blocking)
+	log.Printf("Verbose ? %t", config.Verbose)
 	log.Printf("Interval: %d seconds", config.Interval)
 	log.Printf("Script: %s", config.Script)
 	log.Printf("Number of directories scanned: %d", config.ScannedDirs)
@@ -175,9 +187,12 @@ func parser(cmd string, storage *Storage, config *Configs) {
 		for i, _ := range *storage {
 			(*storage)[i].Done <- true
 		}
+		if config.Verbose {
+			fmt.Println("\U0001F44B  bye!")
+		}
 		os.Exit(1)
 	case "?", "help", "h":
-		fmt.Println("available commands: quit help moo count list configs start stop")
+		fmt.Println("available commands: quit help moo count list fire configs start stop")
 	case "moo":
 		fmt.Println("^__^ \n(oo)\\_______ \n(__)\\       )\\/\\ \n    ||----w | \n    ||     ||\n")
 	case "count":
@@ -188,6 +203,8 @@ func parser(cmd string, storage *Storage, config *Configs) {
 		fmt.Printf("   File types: %s \n", config.FileTypes)
 		fmt.Printf("   File types with no extension ? %t \n", config.FileTypeNone)
 		fmt.Printf("   Exclude dot dirs ? %t \n", config.ExcludeDotDirs)
+		fmt.Printf("   Blocking ? %t \n", config.Blocking)
+		fmt.Printf("   Verbose ? %t \n", config.Verbose)
 		fmt.Printf("   Max number of files: %d \n", config.MaxFiles)
 		fmt.Printf("   Interval: %d seconds \n", config.Interval)
 		fmt.Printf("   Script: %s \n", config.Script)
@@ -197,19 +214,28 @@ func parser(cmd string, storage *Storage, config *Configs) {
 		for _, s := range *storage {
 			fmt.Printf("%d %s last modified at %v \n", s.ID, s.Path, s.ModTime)
 		}
+	case "fire":
+		// exec script
+		Exec(config)
 	case "start":
 		for i, _ := range *storage {
 			(*storage)[i].State <- true
 		}
-		log.Printf("+++ monitoring %d files at interval %d seconds \n", config.Files, config.Interval)
+		if config.Verbose {
+			log.Printf("+++ monitoring %d files at interval %d seconds \n", config.Files, config.Interval)
+		}
 	case "stop":
 		for i, _ := range *storage {
 			(*storage)[i].State <- false
 		}
-		log.Printf("+++ stopped monitoring %d files \n", config.Files)
+		if config.Verbose {
+			log.Printf("+++ stopped monitoring %d files \n", config.Files)
+		}
 	case "debug":
 	default:
-		fmt.Println("unknown command...")
+		if config.Verbose {
+			fmt.Println("unknown command...")
+		}
 
 	}
 	fmt.Print("> ")
@@ -217,18 +243,32 @@ func parser(cmd string, storage *Storage, config *Configs) {
 
 // Exec the script
 func Exec(config *Configs) {
-	//log.Printf(" Script triggered...\n")
-	//cmd := exec.Command(config.Script, "1")
-	//err := cmd.Run()
-	//if err != nil {
-	//	log.Printf("Script error: %v\n", err)
-	//}
-	log.Printf("Script: %s\n", config.Script)
-	out, err := exec.Command(config.Script).Output()
-	if err != nil {
-		log.Printf("Script error: %v\n", err)
+	var out []byte
+	var err error
+
+	if config.Verbose {
+		log.Printf("Script run: %s\n", config.Script)
 	}
-	fmt.Printf("Script result: %s\n", out)
+	cmd := exec.Command(config.Script)
+
+	if config.Blocking {
+		out, err = cmd.Output()
+		if config.Verbose {
+			log.Printf("Output: %+v \n", out)
+
+		}
+	} else {
+		err = cmd.Start()
+		if config.Verbose {
+			errw := cmd.Wait()
+			log.Printf("Command finished with error: %v", errw)
+		}
+	}
+
+	if config.Verbose && err != nil {
+		log.Printf("Script error: %v\n", err)
+
+	}
 }
 
 // Monitor a file for file changes every interval.
@@ -252,10 +292,14 @@ func (s *Store) Monitor(config *Configs) {
 			case <-s.Ticker.C:
 				f, err := os.Stat(s.Path)
 				if err != nil {
-					log.Printf("file check error for (%d) %s (%s)", s.ID, s.Filename, err)
+					if config.Verbose {
+						log.Printf("file check error for (%d) %s (%s)", s.ID, s.Filename, err)
+					}
 				} else {
 					if state && f.ModTime() != s.ModTime {
-						log.Printf(" +++ file change: (%d) %s", s.ID, s.Filename)
+						if config.Verbose {
+							log.Printf(" +++ file change: (%d) %s", s.ID, s.Filename)
+						}
 						// update the record with new information
 						s.ModTime = f.ModTime()
 						s.Info = f
@@ -293,12 +337,16 @@ func (s *Storage) New(config Configs) (uint, uint, error) {
 				return filepath.SkipDir
 			} else {
 				nd += 1
-				log.Printf("* entering directory: %s", info.Name())
+				if config.Verbose {
+					log.Printf("* entering directory: %s", info.Name())
+				}
 			}
 		}
 		// file picking
 		if !info.IsDir() {
-			log.Printf("   > checking %s", info.Name())
+			if config.Verbose {
+				log.Printf("   > checking %s", info.Name())
+			}
 			if !info.Mode().IsRegular() {
 				return filepath.SkipDir
 			}
@@ -312,7 +360,9 @@ func (s *Storage) New(config Configs) (uint, uint, error) {
 			i := sort.SearchStrings(config.FileTypes, ext)
 			if ext_size > 0 && i < len(config.FileTypes) && config.FileTypes[i] == ext {
 				// add the file
-				log.Printf("   + adding %s (%v)", info.Name(), info.ModTime())
+				if config.Verbose {
+					log.Printf("   + adding %s (%v)", info.Name(), info.ModTime())
+				}
 				nf += 1
 				f := Store{
 					ID:       nf,

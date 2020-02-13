@@ -212,7 +212,7 @@ func parser(cmd string, storage *Storage, config *Configs) {
 		fmt.Printf("   Number of files added and being monitored: %d \n", config.Files)
 	case "list":
 		for _, s := range *storage {
-			fmt.Printf("%d %s last modified at %v \n", s.ID, s.Path, s.ModTime)
+			fmt.Printf("%d (%d updates) %s last modified at %v \n", s.ID, s.Updated, s.Path, s.ModTime)
 		}
 	case "fire":
 		// exec script
@@ -277,7 +277,7 @@ func Exec(config *Configs) {
 // State channel activates/deactivates the monitoring action, yet trigger continues.
 func (s *Store) Monitor(config *Configs) {
 
-	go func(s Store) {
+	go func(s *Store) {
 
 		defer close(s.Done)
 		defer s.Ticker.Stop()
@@ -311,7 +311,7 @@ func (s *Store) Monitor(config *Configs) {
 				}
 			}
 		}
-	}(*s)
+	}(s)
 
 }
 

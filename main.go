@@ -1,3 +1,17 @@
+// monitfiles is a small exercise cli app that uses go routines to monitor file changes and execute
+// a script. The sub directories will also be searched for the file types being monitores.
+// Build with:
+// 	$ go build
+// Execute with:
+// 	$ ./monitfiles -f "htm html css js" -i 1 -p "/path/to/root" -s scripts/brave_reload.sh -b -v
+//
+// There is a comand line associated, try:
+// > help
+// or even
+// > moo
+//
+// TODO: if several files change at a time dump the multiple requests with a timeout.
+//
 package main
 
 import (

@@ -3,12 +3,14 @@
 // Build with:
 // 	$ go build
 // Execute with:
-// 	$ ./monitfiles -f "htm html css js" -i 1 -p "/path/to/root" -s scripts/brave_reload.sh -b -v
+// 	$ monitfiles -f "htm html css js" -i 1 -p "/path/to/root" -s scripts/brave_reload.sh -b -v
+// 	$ monitfiles --path . --filetypes "htm html css js" --script "/path/to/script" -v
+// 	$ monitfiles --path . --filetypes "htm html css js" -w -s "/path/to/file"
 //
 // There is a comand line associated, try:
 // > help
-// or even
 // > moo
+// > list
 //
 // TODO: if several files change at a time dump the multiple requests with a timeout.
 //
@@ -41,7 +43,7 @@ var (
 	ErrUnsuported    = errors.New("unsuported platform")
 )
 
-// Configs struct
+// Configs struct where the flags are passed into
 type Configs struct {
 	Path             string
 	FileTypes        []string
@@ -60,7 +62,8 @@ type Configs struct {
 	Trigger          chan bool
 }
 
-// Store struct for each file monitoring
+// Store struct for each file monitoring. The State and Done channels serve to communicate with the main thread.
+// The ticker guarantees independent go routine execution.
 type Store struct {
 	ID       uint
 	Filename string
@@ -77,8 +80,6 @@ type Store struct {
 // Storage is the global slice of stores for files
 type Storage []Store
 
-// Execution:
-// 	$ reloadtab --path . --filetypes htm html css js --script "osascript -e 'tell application "Brave" to tell the active tab of its first window to reload'"
 func main() {
 
 	var err error
@@ -279,7 +280,6 @@ func Exec(config *Configs) {
 	} else {
 		// script execution
 		cmd := exec.Command(config.Script)
-		log.Printf("Script run: %+v\n", cmd) // TODO: REMOVE
 
 		if config.Blocking {
 			out, err = cmd.Output()
@@ -289,9 +289,8 @@ func Exec(config *Configs) {
 			}
 		} else {
 			err = cmd.Start()
-			if config.Verbose {
-				errw := cmd.Wait()
-				log.Printf("Command finished with error: %v", errw)
+			if err == nil {
+				err = cmd.Wait()
 			}
 		}
 	}

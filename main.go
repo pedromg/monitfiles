@@ -26,6 +26,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/pkg/browser"
 )
 
 var (
@@ -36,6 +38,7 @@ var (
 	ErrInvalidTypes  = errors.New("invalid file types")
 	ErrInvalidScript = errors.New("empty script")
 	ErrMaxFiles      = errors.New("MAX files limit reached, please consider new limit")
+	ErrUnsuported    = errors.New("unsuported platform")
 )
 
 // Configs struct
@@ -47,6 +50,7 @@ type Configs struct {
 	IncludeFileNames []string
 	ExcludeFileNames []string
 	Script           string
+	Web              bool // opend the URL in Script in the default browser
 	Blocking         bool // blocks script execution, waits to finish, defaults to false
 	Verbose          bool
 	MaxFiles         uint
@@ -87,6 +91,7 @@ func main() {
 		IncludeFileNames: []string{}, //TODO
 		ExcludeFileNames: []string{}, //TODO
 		Script:           "",
+		Web:              false, // opens the URL in Script in the active browser
 		Blocking:         false,
 		Verbose:          false,
 		MaxFiles:         0,
@@ -105,6 +110,7 @@ func main() {
 	var flagMaxFiles uint
 	var flagInterval uint
 	var flagScript string
+	var flagWeb bool
 
 	flag.StringVar(&flagPath, "path", ".", "path to monitor")
 	flag.StringVar(&flagPath, "p", "", "(shorthand for path)")
@@ -114,6 +120,7 @@ func main() {
 	flag.BoolVar(&flagExcludeDotDirs, "no-dot", true, "exclude (dot) dirs like .git (boolean, set to false to enable entering them)")
 	flag.StringVar(&flagScript, "script", "", "comand to be called upon change detection")
 	flag.StringVar(&flagScript, "s", "", "(shorthand for script)")
+	flag.BoolVar(&flagWeb, "w", false, "opens the script URL in predefined browser")
 	flag.BoolVar(&flagBlocking, "b", false, "blocks script execution, waits to finish, defaults to false")
 	flag.BoolVar(&flagVerbose, "v", false, "verbose output")
 	flag.UintVar(&flagMaxFiles, "max", 200, "max number of files to monitor")
@@ -142,6 +149,7 @@ func main() {
 	config.Verbose = flagVerbose
 	config.MaxFiles = flagMaxFiles
 	config.Interval = flagInterval
+	config.Web = flagWeb
 	config.Script, err = validScript(flagScript)
 	if err != nil {
 		log.Printf("use -h for help")
@@ -171,6 +179,7 @@ func main() {
 	log.Printf("Verbose ? %t", config.Verbose)
 	log.Printf("Interval: %d seconds", config.Interval)
 	log.Printf("Script: %s", config.Script)
+	log.Printf("Web: %t", config.Web)
 	log.Printf("Number of directories scanned: %d", config.ScannedDirs)
 	log.Printf("Number of files added and being monitored: %d", config.Files)
 	log.Print("************************************************")
@@ -222,6 +231,7 @@ func parser(cmd string, storage *Storage, config *Configs) {
 		fmt.Printf("   Max number of files: %d \n", config.MaxFiles)
 		fmt.Printf("   Interval: %d seconds \n", config.Interval)
 		fmt.Printf("   Script: %s \n", config.Script)
+		fmt.Printf("   Web: %t \n", config.Web)
 		fmt.Printf("   Number of directories scanned: %d \n", config.ScannedDirs)
 		fmt.Printf("   Number of files added and being monitored: %d \n", config.Files)
 	case "list":
@@ -263,25 +273,31 @@ func Exec(config *Configs) {
 	if config.Verbose {
 		log.Printf("Script run: %s\n", config.Script)
 	}
-	cmd := exec.Command(config.Script)
-
-	if config.Blocking {
-		out, err = cmd.Output()
-		if config.Verbose {
-			log.Printf("Output: %+v \n", out)
-
-		}
+	if config.Web {
+		// if -w flag and the script contains an URL to be opened in a browser
+		err = browser.OpenURL(config.Script)
 	} else {
-		err = cmd.Start()
-		if config.Verbose {
-			errw := cmd.Wait()
-			log.Printf("Command finished with error: %v", errw)
+		// script execution
+		cmd := exec.Command(config.Script)
+		log.Printf("Script run: %+v\n", cmd) // TODO: REMOVE
+
+		if config.Blocking {
+			out, err = cmd.Output()
+			if config.Verbose {
+				log.Printf("Output: %+v \n", out)
+
+			}
+		} else {
+			err = cmd.Start()
+			if config.Verbose {
+				errw := cmd.Wait()
+				log.Printf("Command finished with error: %v", errw)
+			}
 		}
 	}
 
 	if config.Verbose && err != nil {
 		log.Printf("Script error: %v\n", err)
-
 	}
 }
 

@@ -377,17 +377,22 @@ func (s *Storage) New(config Configs) (uint, uint, error) {
 				log.Printf("   > checking %s", info.Name())
 			}
 			if !info.Mode().IsRegular() {
-				return filepath.SkipDir
+				return nil
 			}
 			// check extension size and if allowed
 			ext_size := len(filepath.Ext(info.Name()))
 			if ext_size == 0 && !config.FileTypeNone {
-				return filepath.SkipDir
+				return nil
 			}
 			// check if extension inside slice of valid ones
-			ext := filepath.Ext(info.Name())[1:]
+			ext := ""
+			if ext_size != 0 {
+				ext = filepath.Ext(info.Name())[1:]
+			}
 			i := sort.SearchStrings(config.FileTypes, ext)
-			if ext_size > 0 && i < len(config.FileTypes) && config.FileTypes[i] == ext {
+			case_ext_listed := ext_size > 0 && i < len(config.FileTypes) && config.FileTypes[i] == ext
+			case_no_ext := ext_size == 0 && config.FileTypeNone
+			if case_ext_listed || case_no_ext {
 				// add the file
 				if config.Verbose {
 					log.Printf("   + adding %s (%v)", info.Name(), info.ModTime())

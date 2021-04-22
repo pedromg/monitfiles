@@ -284,7 +284,7 @@ func Exec(config *Configs) {
 		if config.Blocking {
 			out, err = cmd.Output()
 			if config.Verbose {
-				log.Printf("Output: %+v \n", out)
+				log.Printf("Output: %s \n", out)
 
 			}
 		} else {

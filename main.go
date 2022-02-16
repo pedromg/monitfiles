@@ -33,20 +33,22 @@ import (
 )
 
 var (
-	ErrInvalidParam  = errors.New("invalid param(s)")
-	ErrFile          = errors.New("invalid file")
-	ErrPath          = errors.New("path error")
-	ErrNotAPath      = errors.New("invalid path, please select a path not a file")
-	ErrInvalidTypes  = errors.New("invalid file types")
-	ErrInvalidScript = errors.New("empty script")
-	ErrMaxFiles      = errors.New("MAX files limit reached, please consider new limit")
-	ErrUnsuported    = errors.New("unsuported platform")
+	errInvalidParam  = errors.New("invalid param(s)")
+	errFile          = errors.New("invalid file")
+	errName          = errors.New("invalid file name")
+	errPath          = errors.New("path error")
+	errNotAPath      = errors.New("invalid path, please select a path not a file")
+	errInvalidTypes  = errors.New("invalid file types")
+	errInvalidScript = errors.New("empty script")
+	errMaxFiles      = errors.New("MAX files limit reached, please consider new limit")
+	errUnsuported    = errors.New("unsuported platform")
 )
 
 // Configs struct where the flags are passed into
 type Configs struct {
 	Path             string
 	FileTypes        []string
+	FileNames        []string
 	FileTypeNone     bool
 	ExcludeDotDirs   bool
 	IncludeFileNames []string
@@ -87,6 +89,7 @@ func main() {
 	config := &Configs{
 		Path:             "",
 		FileTypes:        []string{},
+		FileNames:        []string{},
 		FileTypeNone:     false,
 		ExcludeDotDirs:   true,
 		IncludeFileNames: []string{}, //TODO
@@ -104,6 +107,7 @@ func main() {
 	// flags
 	var flagPath string
 	var flagFileTypes string
+	var flagFileNames string
 	var flagFileTypeNone bool   // for files with no extension
 	var flagExcludeDotDirs bool // exclude .dirs (dot dirs like .git)
 	var flagBlocking bool
@@ -117,6 +121,8 @@ func main() {
 	flag.StringVar(&flagPath, "p", "", "(shorthand for path)")
 	flag.StringVar(&flagFileTypes, "filetypes", "htm html css js", "file types to be monitored for changes")
 	flag.StringVar(&flagFileTypes, "f", "htm html css js", "(shorthand for filetypes)")
+	flag.StringVar(&flagFileNames, "filenames", "", "file names to be monitored for changes")
+	flag.StringVar(&flagFileNames, "n", "", "(shorthand for filenames)")
 	flag.BoolVar(&flagFileTypeNone, "none", false, "file types without extension (boolean, set to true to activate)")
 	flag.BoolVar(&flagExcludeDotDirs, "no-dot", true, "exclude (dot) dirs like .git (boolean, set to false to enable entering them)")
 	flag.StringVar(&flagScript, "script", "", "comand to be called upon change detection")
@@ -144,6 +150,10 @@ func main() {
 		log.Printf("use -h for help")
 		log.Fatalf("*** Error: %s", err)
 	}
+	config.FileNames, err = validFileNames(flagFileNames)
+	if err != nil {
+		log.Printf("Warning, some filenames were discarded...")
+	}
 	config.FileTypeNone = flagFileTypeNone
 	config.ExcludeDotDirs = flagExcludeDotDirs
 	config.Blocking = flagBlocking
@@ -166,13 +176,14 @@ func main() {
 	}
 
 	// start monitoring
-	for i, _ := range *storage {
+	for i := range *storage {
 		(*storage)[i].Monitor(config)
 	}
 
 	log.Print("************************************************")
 	log.Printf("Root path: %s", config.Path)
 	log.Printf("File types: %s", config.FileTypes)
+	log.Printf("File names: %s", config.FileNames)
 	log.Printf("File types with no extension ? %t", config.FileTypeNone)
 	log.Printf("Exclude dot dirs ? %t", config.ExcludeDotDirs)
 	log.Printf("Max number of files: %d", config.MaxFiles)
@@ -208,7 +219,7 @@ func parser(cmd string, storage *Storage, config *Configs) {
 	fmt.Println("")
 	switch cmd {
 	case "quit":
-		for i, _ := range *storage {
+		for i := range *storage {
 			(*storage)[i].Done <- true
 		}
 		if config.Verbose {
@@ -225,6 +236,7 @@ func parser(cmd string, storage *Storage, config *Configs) {
 		fmt.Println("configs:")
 		fmt.Printf("   Root path: %s \n", config.Path)
 		fmt.Printf("   File types: %s \n", config.FileTypes)
+		fmt.Printf("   File names: %s \n", config.FileNames)
 		fmt.Printf("   File types with no extension ? %t \n", config.FileTypeNone)
 		fmt.Printf("   Exclude dot dirs ? %t \n", config.ExcludeDotDirs)
 		fmt.Printf("   Blocking ? %t \n", config.Blocking)
@@ -243,14 +255,14 @@ func parser(cmd string, storage *Storage, config *Configs) {
 		// exec script
 		Exec(config)
 	case "start":
-		for i, _ := range *storage {
+		for i := range *storage {
 			(*storage)[i].State <- true
 		}
 		if config.Verbose {
 			log.Printf("+++ monitoring %d files at interval %d seconds \n", config.Files, config.Interval)
 		}
 	case "stop":
-		for i, _ := range *storage {
+		for i := range *storage {
 			(*storage)[i].State <- false
 		}
 		if config.Verbose {
@@ -332,7 +344,7 @@ func (s *Store) Monitor(config *Configs) {
 						// update the record with new information
 						s.ModTime = f.ModTime()
 						s.Info = f
-						s.Updated += 1
+						s.Updated++
 						// exec script
 						Exec(config)
 
@@ -353,19 +365,20 @@ func (s *Store) Monitor(config *Configs) {
 func (s *Storage) New(config Configs) (uint, uint, error) {
 	var nd, nf uint = 0, 0
 
+	// per dir
 	err := filepath.Walk(config.Path, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
 		if nf > config.MaxFiles {
-			return ErrMaxFiles
+			return errMaxFiles
 		}
 		if info.IsDir() {
 			// directory exclusion
 			if (info.Name()[0:1] == ".") && config.ExcludeDotDirs {
 				return filepath.SkipDir
 			} else {
-				nd += 1
+				nd++
 				if config.Verbose {
 					log.Printf("* entering directory: %s", info.Name())
 				}
@@ -380,24 +393,24 @@ func (s *Storage) New(config Configs) (uint, uint, error) {
 				return nil
 			}
 			// check extension size and if allowed
-			ext_size := len(filepath.Ext(info.Name()))
-			if ext_size == 0 && !config.FileTypeNone {
+			extSize := len(filepath.Ext(info.Name()))
+			if extSize == 0 && !config.FileTypeNone {
 				return nil
 			}
 			// check if extension inside slice of valid ones
 			ext := ""
-			if ext_size != 0 {
+			if extSize != 0 {
 				ext = filepath.Ext(info.Name())[1:]
 			}
 			i := sort.SearchStrings(config.FileTypes, ext)
-			case_ext_listed := ext_size > 0 && i < len(config.FileTypes) && config.FileTypes[i] == ext
-			case_no_ext := ext_size == 0 && config.FileTypeNone
-			if case_ext_listed || case_no_ext {
+			caseExtListed := extSize > 0 && i < len(config.FileTypes) && config.FileTypes[i] == ext
+			caseNoExt := extSize == 0 && config.FileTypeNone
+			if caseExtListed || caseNoExt {
 				// add the file
 				if config.Verbose {
 					log.Printf("   + adding %s (%v)", info.Name(), info.ModTime())
 				}
-				nf += 1
+				nf++
 				f := Store{
 					ID:       nf,
 					Filename: info.Name(),
@@ -416,6 +429,33 @@ func (s *Storage) New(config Configs) (uint, uint, error) {
 		return nil
 	})
 
+	// per name (-filenames)
+	for _, n := range config.FileNames {
+		info, err := os.Stat(n)
+		if err != nil {
+			log.Printf("## %s %s %v", n, errName, err)
+			continue
+		}
+		// add the file
+		if config.Verbose {
+			log.Printf("   + adding %s (%v)", info.Name(), info.ModTime())
+		}
+		nf++
+		f := Store{
+			ID:       nf,
+			Filename: info.Name(),
+			FileType: filepath.Ext(info.Name())[1:],
+			Path:     n,
+			ModTime:  info.ModTime(),
+			Updated:  0,
+			Info:     info,
+			Done:     make(chan bool),
+			State:    make(chan bool),
+			Ticker:   time.NewTicker(time.Duration(config.Interval) * time.Second),
+		}
+		*s = append(*s, f)
+	}
+
 	return nd, nf, err
 }
 
@@ -424,16 +464,16 @@ func validPath(p string) (string, error) {
 
 	stat, err := os.Stat(p)
 	if err != nil {
-		return "", ErrPath
+		return "", errPath
 	}
 
 	if !stat.IsDir() {
-		return "", ErrNotAPath
+		return "", errNotAPath
 	}
 
 	res, err := filepath.Abs(p)
 	if err != nil {
-		return "", ErrPath
+		return "", errPath
 	}
 
 	return res, err
@@ -446,7 +486,28 @@ func validFileTypes(ft string) ([]string, error) {
 
 	res := strings.Fields(strings.ToLower(ft))
 	if len(res) < 1 {
-		return res, ErrInvalidTypes
+		return res, errInvalidTypes
+	}
+
+	sort.StringSlice(res).Sort()
+	return res, err
+}
+
+// validFileNames checks filenames and removes invalid ones.
+func validFileNames(fn string) ([]string, error) {
+	var err error
+
+	names := strings.Fields(fn)
+	if len(names) < 1 {
+		return nil, nil
+	}
+
+	res := make([]string, len(names))
+
+	for i, n := range names {
+		if _, err := os.Open(n); err == nil {
+			res[i] = n
+		}
 	}
 
 	sort.StringSlice(res).Sort()
@@ -457,7 +518,7 @@ func validScript(s string) (string, error) {
 	var err error
 
 	if len(s) == 0 {
-		return "", ErrInvalidScript
+		return "", errInvalidScript
 	}
 
 	return s, err

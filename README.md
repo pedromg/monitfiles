@@ -121,7 +121,7 @@ $ ./monitfiles -filenames "main.go main_test.go" -f md -p . -s "./scripts/say_hi
 > configs
  
 configs:
-   Root path: /home/ubuntu/scripts/monitfiles 
+   Root path: .../scripts/monitfiles 
    File types: [md] 
    File names: [main.go main_test.go] 
    File types with no extension ? false 

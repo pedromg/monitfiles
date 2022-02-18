@@ -65,6 +65,8 @@ $ ./monitfiles
     	comand to be called upon change detection
   -v	verbose output
   -w	opens the script URL in predefined browser
+  -version 
+    	prints the version of the application. A major version update after 1.0 will likely change the calling params.
 
 ```
 

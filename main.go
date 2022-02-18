@@ -116,6 +116,7 @@ func main() {
 	var flagInterval uint
 	var flagScript string
 	var flagWeb bool
+	var flagVersion bool
 
 	flag.StringVar(&flagPath, "path", ".", "path to monitor")
 	flag.StringVar(&flagPath, "p", "", "(shorthand for path)")
@@ -132,12 +133,18 @@ func main() {
 	flag.BoolVar(&flagVerbose, "v", false, "verbose output")
 	flag.UintVar(&flagMaxFiles, "max", 200, "max number of files to monitor")
 	flag.UintVar(&flagInterval, "i", 2, "interval in seconds for monitor changes")
+	flag.BoolVar(&flagVersion, "version", false, "version of the app")
 
 	flag.Parse()
 
 	if flag.NFlag() < 1 {
 		flag.PrintDefaults()
 		log.Fatal("please specify params")
+	}
+
+	if flagVersion {
+		fmt.Println("Version: ", string(version))
+		os.Exit(0)
 	}
 
 	config.Path, err = validPath(flagPath)

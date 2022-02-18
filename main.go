@@ -142,8 +142,14 @@ func main() {
 		log.Fatal("please specify params")
 	}
 
+	config.Verbose = flagVerbose
+
 	if flagVersion {
 		fmt.Println("Version: ", string(version))
+		if config.Verbose {
+			fmt.Println("Release: ", string(goToolChainRev))
+			fmt.Println("Compiled and built with <3 from Gophers:", string(goToolChainVer))
+		}
 		os.Exit(0)
 	}
 
@@ -164,7 +170,6 @@ func main() {
 	config.FileTypeNone = flagFileTypeNone
 	config.ExcludeDotDirs = flagExcludeDotDirs
 	config.Blocking = flagBlocking
-	config.Verbose = flagVerbose
 	config.MaxFiles = flagMaxFiles
 	config.Interval = flagInterval
 	config.Web = flagWeb

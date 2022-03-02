@@ -21,6 +21,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -83,7 +84,11 @@ type Store struct {
 type Storage []Store
 
 func main() {
+	exit := exitErrors[run(os.Args, os.Stdout)]
+	os.Exit(exit.Exit)
+}
 
+func run(ags []string, stdout io.Writer) int {
 	var err error
 
 	config := &Configs{
@@ -139,7 +144,8 @@ func main() {
 
 	if flag.NFlag() < 1 {
 		flag.PrintDefaults()
-		log.Fatal("please specify params")
+		// log.Fatal("please specify params")
+		return errNoParams
 	}
 
 	config.Verbose = flagVerbose
@@ -150,7 +156,8 @@ func main() {
 			fmt.Println("Release: ", string(goToolChainRev))
 			fmt.Println("Compiled and built with <3 from Gophers:", string(goToolChainVer))
 		}
-		os.Exit(0)
+		// os.Exit(0)
+		return errOK
 	}
 
 	config.Path, err = validPath(flagPath)
@@ -176,7 +183,8 @@ func main() {
 	config.Script, err = validScript(flagScript)
 	if err != nil {
 		log.Printf("use -h for help")
-		log.Fatalf("*** Error: %s", err)
+		// log.Fatalf("*** Error: %s", err)
+		return errScript
 	}
 	// channels
 	config.Trigger = make(chan bool)
@@ -184,7 +192,8 @@ func main() {
 	storage := &Storage{}
 	config.ScannedDirs, config.Files, err = storage.New(*config)
 	if err != nil {
-		log.Fatalf("*** Error: %s", err)
+		//log.Fatalf("*** Error: %s", err)
+		return errStorage
 	}
 
 	// start monitoring
@@ -224,6 +233,8 @@ func main() {
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "reading standard input:", err)
 	}
+
+	return errUnknown
 }
 
 // parser is the function parses and interprets the command
@@ -237,7 +248,7 @@ func parser(cmd string, storage *Storage, config *Configs) {
 		if config.Verbose {
 			fmt.Println("\U0001F44B  bye!")
 		}
-		os.Exit(1)
+		os.Exit(1) // TODO: replace with return a successful exitError
 	case "?", "help", "h":
 		fmt.Println("available commands: quit help moo count list fire configs start stop")
 	case "moo":

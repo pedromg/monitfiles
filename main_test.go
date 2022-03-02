@@ -90,5 +90,3 @@ func TestValidScript(t *testing.T) {
 		}
 	}
 }
-
-// TODO: test main

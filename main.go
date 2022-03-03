@@ -224,7 +224,9 @@ func run(ags []string, stdout io.Writer) int {
 		if line == "" {
 			continue
 		}
-		parser(line, storage, config)
+		if err := parser(line, storage, config); err != errContinue {
+			return err
+		}
 	}
 	if err := scanner.Err(); err != nil {
 		fmt.Fprintln(os.Stderr, "reading standard input:", err)
@@ -234,7 +236,7 @@ func run(ags []string, stdout io.Writer) int {
 }
 
 // parser is the function parses and interprets the command
-func parser(cmd string, storage *Storage, config *Configs) {
+func parser(cmd string, storage *Storage, config *Configs) int {
 	fmt.Println("")
 	switch cmd {
 	case "quit":
@@ -244,7 +246,7 @@ func parser(cmd string, storage *Storage, config *Configs) {
 		if config.Verbose {
 			fmt.Println("\U0001F44B  bye!")
 		}
-		os.Exit(1) // TODO: replace with return a successful exitError
+		return errOK
 	case "?", "help", "h":
 		fmt.Println("available commands: quit help moo count list fire configs start stop")
 	case "moo":
@@ -295,6 +297,9 @@ func parser(cmd string, storage *Storage, config *Configs) {
 
 	}
 	fmt.Print("> ")
+
+	// no error, do nothing
+	return errContinue
 }
 
 // Exec the script

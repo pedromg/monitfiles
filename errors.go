@@ -8,6 +8,7 @@ type exitError struct {
 }
 
 var (
+	errContinue  = -2 // no error, do nothing
 	errUnknown   = -1
 	errOK        = 0 // no error
 	errNoParams  = 1
@@ -17,6 +18,7 @@ var (
 	errStorage   = 5
 
 	exitErrors = map[int]exitError{
+		errContinue:  {errContinue, 0, ""},
 		errUnknown:   {errUnknown, 1, "unknown error."},
 		errOK:        {errOK, 0, "Exited, bye."},
 		errNoParams:  {errNoParams, 1, "Unspecified params: "},

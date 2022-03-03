@@ -22,6 +22,7 @@ var cases = []testCases{
 	{7, 5, exitError{errStorage, 1, "error building storage"}},
 	{8, 100, exitError{errUnknown, 1, "unknown error."}},
 	{9, -1, exitError{errUnknown, 1, "unknown error."}},
+	{10, -2, exitError{errContinue, 0, ""}},
 }
 
 func TestExitError(t *testing.T) {

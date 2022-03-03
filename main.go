@@ -140,11 +140,10 @@ func run(ags []string, stdout io.Writer) int {
 	flag.UintVar(&flagInterval, "i", 2, "interval in seconds for monitor changes")
 	flag.BoolVar(&flagVersion, "version", false, "version of the app")
 
-	flag.Parse()
+	flag.Parse() // TODO: catch it here, kills the program flow
 
 	if flag.NFlag() < 1 {
 		flag.PrintDefaults()
-		// log.Fatal("please specify params")
 		return errNoParams
 	}
 
@@ -156,7 +155,6 @@ func run(ags []string, stdout io.Writer) int {
 			fmt.Println("Release: ", string(goToolChainRev))
 			fmt.Println("Compiled and built with <3 from Gophers:", string(goToolChainVer))
 		}
-		// os.Exit(0)
 		return errOK
 	}
 
@@ -183,7 +181,6 @@ func run(ags []string, stdout io.Writer) int {
 	config.Script, err = validScript(flagScript)
 	if err != nil {
 		log.Printf("use -h for help")
-		// log.Fatalf("*** Error: %s", err)
 		return errScript
 	}
 	// channels
@@ -192,7 +189,6 @@ func run(ags []string, stdout io.Writer) int {
 	storage := &Storage{}
 	config.ScannedDirs, config.Files, err = storage.New(*config)
 	if err != nil {
-		//log.Fatalf("*** Error: %s", err)
 		return errStorage
 	}
 
